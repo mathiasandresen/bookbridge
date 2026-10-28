@@ -9,7 +9,7 @@ from src.api.openai_compatible_client import OpenAICompatibleClient
 
 def llm_provider() -> str:
     provider = (os.environ.get("LLM_PROVIDER") or "ollama").strip().lower()
-    if provider in {"openai-compatible", "openai_compat", "llama", "llama-server", "llama_swap", "llama-swap"}:
+    if provider in {"openai_compatible", "openai-compatible", "openai_compat", "llama", "llama-server", "llama_swap", "llama-swap"}:
         return "openai_compatible"
     if provider == "openai":
         return "openai"

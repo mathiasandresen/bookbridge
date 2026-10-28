@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import MagicMock
 
-from src.api.llm_client import create_llm_client
+from src.api.llm_client import create_llm_client, llm_provider
 from src.api.ollama_client import OllamaClient
 from src.api.openai_compatible_client import OpenAICompatibleClient
 
@@ -124,8 +124,14 @@ class TestLLMFactory(_EnvGuard):
         self.assertIsInstance(create_llm_client(), OllamaClient)
 
     def test_factory_selects_openai_compatible_aliases(self):
-        os.environ["LLM_PROVIDER"] = "llama-swap"
-        self.assertIsInstance(create_llm_client(), OpenAICompatibleClient)
+        for provider in ("openai_compatible", "openai-compatible", "openai_compat", "llama",
+                         "llama-server", "llama_swap", "llama-swap", " OPENAI_COMPATIBLE "):
+            with self.subTest(provider=provider):
+                os.environ["LLM_PROVIDER"] = provider
+                self.assertEqual(llm_provider(), "openai_compatible")
+                client = create_llm_client()
+                self.assertIsInstance(client, OpenAICompatibleClient)
+                self.assertEqual(client.provider, "openai_compatible")
 
     def test_factory_selects_openai(self):
         os.environ["LLM_PROVIDER"] = "openai"

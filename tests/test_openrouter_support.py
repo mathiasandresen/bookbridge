@@ -8,6 +8,7 @@ import pytest
 import requests
 from flask import Flask
 
+from src.api.llm_client import create_llm_client
 from src.api.openai_compatible_client import OpenAICompatibleClient
 from src.utils.transcription_providers import WhisperCppServerProvider
 from src.web_server import _run_test_connection, _test_openai_compatible, _test_whispercpp
@@ -138,6 +139,7 @@ def test_catalog_failures(payload, status, word):
 
 
 def test_real_settings_test_path_and_runtime_urls(monkeypatch):
+    monkeypatch.setenv('LLM_PROVIDER', 'openai_compatible')
     monkeypatch.setenv('LLM_BASE_URL', BASE)
     monkeypatch.setenv('OLLAMA_ENABLED', 'true')
     monkeypatch.setenv('LLM_EMBED_MODEL', EMBED)
@@ -148,7 +150,8 @@ def test_real_settings_test_path_and_runtime_urls(monkeypatch):
         result = _run_test_connection('ollama', payload).get_json()
     assert result['ok']
     assert get.call_args.args[0] == BASE + '/models?output_modalities=all'
-    client = OpenAICompatibleClient('openai_compatible')
+    client = create_llm_client()
+    assert isinstance(client, OpenAICompatibleClient)
     client.session = MagicMock()
     client.session.request.return_value = response(payload={'data': [{'embedding': [1]}]})
     assert client.embed(['text']) == [[1]]
