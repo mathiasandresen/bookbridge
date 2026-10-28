@@ -13665,6 +13665,7 @@ def _run_test_connection(service: str, payload: dict):
         ),
         'whispercpp': lambda data: _test_whispercpp(
             _normalize_test_url(data.get('WHISPER_CPP_URL')),
+            _coerce_test_str(data.get('WHISPER_CPP_API_KEY')),
         ),
     }
     tester = testers.get(service)
@@ -14200,40 +14201,50 @@ def _test_llm_provider(
 
 
 def _test_openai_compatible(provider: str, base_url: str, api_key: str, embed_model: str, chat_model: str) -> dict:
+    from src.api.openai_compatible_client import model_catalog_url, parse_model_catalog
+
     headers = {"Accept": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    r = requests.get(f"{base_url.rstrip('/')}/models", headers=headers, timeout=10)
+    r = requests.get(model_catalog_url(base_url), headers=headers, timeout=10)
     if r.status_code != 200:
         label = "OpenAI" if provider == "openai" else "OpenAI-compatible endpoint"
         return {"ok": False, "message": f"{label} returned HTTP {r.status_code}"}
-    models = [m.get("id", "") for m in (r.json() or {}).get("data", []) if isinstance(m, dict) and m.get("id")]
-    missing = [m for m in (embed_model, chat_model) if models and m not in models]
+    try:
+        models = parse_model_catalog(r.json())
+    except (ValueError, TypeError):
+        return {"ok": False, "message": "Malformed model catalog; configured models unverified"}
+    if not models:
+        return {"ok": False, "message": "Empty model catalog; configured models unverified"}
+    missing = [f"{role}: {model}" for role, model in (("embedding", embed_model), ("chat / judge", chat_model))
+               if model not in models]
     if missing:
-        details = ", ".join(missing)
-        return {
-            "ok": False,
-            "message": f"Connected, but configured model(s) were not listed by /models: {details}",
-        }
-    return {
-        "ok": True,
-        "message": f"Connected. {embed_model} embeddings ready, {chat_model} judge ready",
-    }
+        return {"ok": False, "message": "Configured model(s) not listed by /models: " + ", ".join(missing)}
+    return {"ok": True, "message": f"Configured model IDs found: embedding {embed_model}, chat / judge {chat_model}. Inference unverified."}
 
 
-def _test_whispercpp(url: str) -> dict:
-    """Test whisper.cpp / OpenAI-compatible transcription server reachability."""
+def _test_whispercpp(url: str, api_key: str = "") -> dict:
+    """Probe GET reachability without running transcription inference."""
     if not url:
         return {"ok": False, "message": "Missing Whisper.cpp server URL"}
-
+    api_key = api_key.strip()
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
-        resp = requests.get(url, timeout=5)
+        resp = requests.get(url, headers=headers, timeout=5, allow_redirects=False)
     except requests.exceptions.RequestException as e:
-        return {"ok": False, "message": _test_conn_error(e)}
-
-    # The transcription endpoint typically only accepts POST, so any HTTP
-    # response (including 404/405 on GET) proves the server is reachable.
-    return {"ok": True, "message": f"Server reachable at {url} (HTTP {resp.status_code})"}
+        message = _test_conn_error(e)
+        if api_key:
+            message = message.replace(api_key, "[redacted]")
+        return {"ok": False, "message": message}
+    status = resp.status_code
+    if status in (401, 403):
+        return {"ok": False, "message": f"Authentication or access denied (HTTP {status})"}
+    if not (200 <= status < 300 or status in (404, 405)):
+        return {"ok": False, "message": f"Transcription endpoint returned HTTP {status}"}
+    message = f"GET reachability only (HTTP {status}); transcription and credentials unverified."
+    if status == 404:
+        message += " The endpoint path may be incorrect."
+    return {"ok": True, "reachability_only": True, "message": message}
 
 
 def _test_ollama(enabled: bool, url: str, embed_model: str, chat_model: str) -> dict:

@@ -2933,6 +2933,11 @@
                             </div>
                         </div>
                         <div class="form-group full-width">
+                            <label>Transcription API key</label>
+                            <input type="password" name="WHISPER_CPP_API_KEY" value="{{ get_val('WHISPER_CPP_API_KEY', '') }}" autocomplete="new-password" />
+                            <div class="help-text">Optional for local servers. Required for authenticated endpoints such as OpenRouter. Independent of LLM and Deepgram keys. Clear this field to remove the saved key.</div>
+                        </div>
+                        <div class="form-group full-width">
                             <label>Split Uploads (minutes)</label>
                             <input type="number" name="WHISPER_CPP_CHUNK_MINUTES" value="{{ get_val('WHISPER_CPP_CHUNK_MINUTES', '0') }}"
                                 min="0" max="60" step="1" placeholder="0" />
@@ -2995,6 +3000,7 @@
                                 model from the suggestions or enter a custom whisper.cpp model name. Larger = better
                                 accuracy but slower. For the Whisper.cpp Server, this must match the model id the
                                 server (or llama-swap) exposes — a mismatched id makes the server reject the request.
+                                For OpenRouter, for example, use <code>openai/whisper-large-v3</code>.
                             </div>
                         </div>
                     </div>
@@ -3461,7 +3467,7 @@
                 'LLM_EMBED_MODEL', 'LLM_CHAT_MODEL',
                 'OLLAMA_URL', 'OLLAMA_EMBED_MODEL', 'OLLAMA_CHAT_MODEL'
             ],
-            whispercpp: ['WHISPER_CPP_URL'],
+            whispercpp: ['WHISPER_CPP_URL', 'WHISPER_CPP_API_KEY'],
         };
 
         function getTestConnectionPayload(service) {
@@ -3498,7 +3504,7 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data.ok) {
-                        btn.innerHTML = '✅ Connected';
+                        btn.innerHTML = data.reachability_only ? '✅ Reachable only' : '✅ Connected';
                         alert('✅ ' + data.message);
                     } else {
                         btn.innerHTML = '❌ Failed';

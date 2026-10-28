@@ -412,7 +412,7 @@ class TestWhisperCppServerProvider(unittest.TestCase):
 
         durations = []
 
-        def fake_post(url, files=None, data=None, timeout=None):
+        def fake_post(url, files=None, data=None, timeout=None, headers=None, allow_redirects=True):
             buf = files["file"][1]
             with wave.open(io.BytesIO(buf.read()), "rb") as wf:
                 dur = wf.getnframes() / wf.getframerate()
@@ -629,7 +629,7 @@ class TestWhisperCppServerProvider(unittest.TestCase):
 
         call_count = [0]
 
-        def fake_post(url, files=None, data=None, timeout=None):
+        def fake_post(url, files=None, data=None, timeout=None, headers=None, allow_redirects=True):
             call_count[0] += 1
             buf = files["file"][1]
             with wave.open(io.BytesIO(buf.read()), "rb") as wf:

@@ -70,3 +70,34 @@ assert.equal(note.textContent, '1 unsaved change');
 text.value = '';
 text.handlers.change();
 assert.equal(warning(), undefined);
+
+// Connection tests submit the unsaved transcription key and qualify GET reachability.
+const connectionStart = html.indexOf('const TEST_CONNECTION_FIELDS =');
+const connectionEnd = html.indexOf('function toggleSection(', connectionStart);
+assert.ok(connectionStart >= 0 && connectionEnd > connectionStart);
+const connectionFields = {
+    WHISPER_CPP_URL: { type: 'text', value: 'https://openrouter.ai/api/v1/audio/transcriptions' },
+    WHISPER_CPP_API_KEY: { type: 'password', value: 'unsaved-key' },
+};
+let sentPayload;
+let notice;
+const connectionContext = vm.createContext({
+    document: { querySelector: selector => connectionFields[selector.match(/name="([^"]+)"/)[1]] },
+    fetch: (url, options) => {
+        sentPayload = JSON.parse(options.body);
+        return Promise.resolve({ json: () => Promise.resolve({
+            ok: true, reachability_only: true, message: 'GET reachability only; transcription and credentials unverified.',
+        }) });
+    },
+    alert: message => { notice = message; },
+    setTimeout: () => {},
+});
+vm.runInContext(html.slice(connectionStart, connectionEnd), connectionContext);
+const connectionButton = { innerHTML: 'Test', disabled: false };
+connectionContext.testConnection('whispercpp', connectionButton);
+setImmediate(() => {
+    assert.equal(sentPayload.WHISPER_CPP_API_KEY, 'unsaved-key');
+    assert.equal(connectionButton.innerHTML, '✅ Reachable only');
+    assert.ok(notice.includes('credentials unverified'));
+    assert.equal(connectionButton.disabled, false);
+});
