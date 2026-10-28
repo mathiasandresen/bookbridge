@@ -597,7 +597,7 @@ Ollama notes:
 
 - The model never runs on hot sync paths — only on linking, suggestion scans, and alignment work — so day-to-day syncing stays fast.
 - Use the **Test** button to confirm the server is reachable. It reports each model's context length and capabilities, and warns if your embedding model can't actually embed.
-- OpenAI-compatible providers are tested with `/v1/models`; embeddings and chat calls are still lazy so local servers can load models on first real use.
+- OpenAI-compatible providers are tested with `/models` under the configured base URL. OpenRouter uses `/models?output_modalities=all` so embedding models are included. The test verifies catalog IDs only; embeddings and chat inference remain unverified.
 - Existing `OLLAMA_*` feature toggles remain supported. Generic `LLM_*` connection/model settings take precedence when present.
 - Finer tuning knobs (score bands, judge margins, similarity thresholds) are available in the Settings UI if you want them, but the defaults are a sensible starting point.
 
@@ -644,6 +644,7 @@ audio ↔ text alignment; it runs locally by default and needs no external servi
 | Whisper Device | `WHISPER_DEVICE` | `auto` | `auto`, `cpu`, or `cuda`. |
 | Whisper Compute Type | `WHISPER_COMPUTE_TYPE` | `auto` | Precision mode for local Whisper. |
 | Whisper.cpp URL | `WHISPER_CPP_URL` | empty | Full endpoint URL, including the path — e.g. `http://HOST:8080/v1/audio/transcriptions`. |
+| Transcription API key | `WHISPER_CPP_API_KEY` | empty | Optional Bearer key for the configured transcription endpoint. Required by authenticated services such as OpenRouter. Stored encrypted; independent of LLM and Deepgram keys. Clear the field to remove it. |
 | Whisper.cpp Timeout | `WHISPER_CPP_TIMEOUT` | `600` | Seconds to wait for a single transcription request. Raise it for slow servers or long uploads. |
 | Split Uploads | `WHISPER_CPP_CHUNK_MINUTES` | `0` | Split each upload into sub-requests of this many minutes and offset the returned timestamps. `0` disables. |
 | Send Original Audio | `WHISPER_CPP_SEND_ORIGINAL` | `false` | Upload the original mp3/m4b instead of converting to WAV and splitting locally. |
@@ -661,6 +662,9 @@ audio ↔ text alignment; it runs locally by default and needs no external servi
 | Use a read-along's own timings when they check out | `SMIL_SKIP_CTC` | `false` | Applies while forced alignment is on. When the ebook is a read-along (a Storyteller or StoryAlign EPUB with media overlays), checks its timings for places where they lose sync with the audio; timings that pass become the book's map without running forced alignment. Off: forced alignment runs first, and the read-along's timings are used only if it fails. |
 
 Transcription notes:
+
+- For OpenRouter, select `whispercpp`, set the URL to `https://openrouter.ai/api/v1/audio/transcriptions`, enter the transcription API key, and set Whisper Model to `openai/whisper-large-v3`. Leave Send Original Audio disabled for initial verification. Confirm nonempty timed segments with a separate short transcription before processing books.
+- The transcription **Test** button sends a GET with the form's current key. Successful GETs and HTTP 404/405 establish reachability only, with transcription and credentials unverified. A 404 may mean the endpoint path is wrong. HTTP 401/403 and other failures fail the test. Uploads reject redirects; configure the final endpoint directly. Provider error bodies are omitted to prevent credential disclosure.
 
 - The **Whisper Model** field in Settings is a text box with common suggestions. You can use a normal preset like `tiny` or enter a custom model name directly.
 - The `whispercpp` provider works with any OpenAI-compatible transcription endpoint — whisper.cpp server, speaches, parakeet, or a proxy such as llama-swap — not just whisper.cpp itself. Use the 🔗 **Test** button next to the URL to check the endpoint before saving. Inside Docker, do not use `localhost`; use the host's LAN IP or the whisper container's service name.

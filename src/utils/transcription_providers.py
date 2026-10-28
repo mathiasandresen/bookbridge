@@ -269,6 +269,7 @@ class WhisperCppServerProvider(TranscriptionProvider):
                 "WHISPER_CPP_URL is not configured. Set it in Settings → Advanced Options."
             )
         self.server_url = url
+        self.api_key = os.environ.get("WHISPER_CPP_API_KEY", "").strip()
         self.model = os.environ.get("WHISPER_MODEL", "small")
         self.timeout = int(os.environ.get("WHISPER_CPP_TIMEOUT", "600"))
         self.send_original = os.environ.get(
@@ -392,59 +393,60 @@ class WhisperCppServerProvider(TranscriptionProvider):
             "timestamp_granularities[]": ["word", "segment"],
         }
 
-        response = requests.post(
-            self.server_url,
-            files=files,
-            data=data,
-            timeout=self.timeout
-        )
-
-        if not response.ok:
-            # Surface the server's error body — whisper.cpp / llama-swap explains
-            # *why* here (e.g. unknown model id, failed to decode audio). Without
-            # this the caller only sees a bare "HTTP 400" and cannot diagnose it.
-            body = (response.text or "").strip()
-            if len(body) > 500:
-                body = body[:500] + "…"
-            logger.error(
-                f"❌ whisper.cpp server returned HTTP {response.status_code} from "
-                f"{self.server_url} (model={self.model}). Response: {body or '<empty body>'}"
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        try:
+            response = requests.post(
+                self.server_url,
+                files=files,
+                data=data,
+                headers=headers,
+                timeout=self.timeout,
+                allow_redirects=False,
             )
-            response.raise_for_status()
+        except requests.exceptions.RequestException:
+            # Transport exceptions can contain headers or provider-echoed secrets.
+            raise RuntimeError("Transcription upload failed to connect or timed out") from None
 
-        result = response.json()
+        if not response.ok or response.status_code in range(300, 400):
+            # Do not expose provider bodies, URLs or request objects containing secrets.
+            raise RuntimeError(f"Transcription server returned HTTP {response.status_code}")
 
-        segments_out = []
-        segments = result.get("segments") or []
-        top_level_words = result.get("words", [])
+        try:
+            result = response.json()
 
-        for seg in segments:
-            seg_dict = {
-                "start": float(seg["start"]),
-                "end": float(seg["end"]),
-                "text": seg["text"].strip()
-            }
-            if seg.get("words"):
-                valid_words = self._validate_words(seg["words"])
-                if valid_words:
-                    seg_dict["words"] = valid_words
-            segments_out.append(seg_dict)
+            segments_out = []
+            segments = result.get("segments") or []
+            top_level_words = result.get("words", [])
 
-        if top_level_words:
-            valid_top_words = self._validate_words(top_level_words)
-            if valid_top_words:
-                segments_out = self._associate_words_with_segments(segments_out, valid_top_words)
-                if not segments and isinstance(result.get("text"), str) and result["text"].strip():
-                    segments_out[0]["text"] = result["text"].strip()
+            for seg in segments:
+                seg_dict = {
+                    "start": float(seg["start"]),
+                    "end": float(seg["end"]),
+                    "text": seg["text"].strip()
+                }
+                if seg.get("words"):
+                    valid_words = self._validate_words(seg["words"])
+                    if valid_words:
+                        seg_dict["words"] = valid_words
+                segments_out.append(seg_dict)
 
-        if not segments_out and result.get("text"):
-            logger.warning(
-                "⚠️ Server returned plain text without timestamped segments — "
-                "alignment will be degraded. Ensure the server supports verbose_json."
-            )
-            segments_out.append({"start": 0.0, "end": 0.0, "text": str(result["text"]).strip()})
+            if top_level_words:
+                valid_top_words = self._validate_words(top_level_words)
+                if valid_top_words:
+                    segments_out = self._associate_words_with_segments(segments_out, valid_top_words)
+                    if not segments and isinstance(result.get("text"), str) and result["text"].strip():
+                        segments_out[0]["text"] = result["text"].strip()
 
-        return segments_out
+            if not segments_out and result.get("text"):
+                logger.warning(
+                    "⚠️ Server returned plain text without timestamped segments — "
+                    "alignment will be degraded. Ensure the server supports verbose_json."
+                )
+                segments_out.append({"start": 0.0, "end": 0.0, "text": str(result["text"]).strip()})
+
+            return segments_out
+        except (ValueError, TypeError, KeyError, AttributeError):
+            raise RuntimeError("Transcription server returned malformed timing data") from None
 
     def _validate_words(self, words: list) -> list[dict] | None:
         """Validate word records. Returns None if any word is malformed (don't attach partial lists)."""

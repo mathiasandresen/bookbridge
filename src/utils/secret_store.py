@@ -50,6 +50,7 @@ def _extra_secret_keys() -> frozenset:
     return frozenset({
         "LLM_API_KEY",
         "DEEPGRAM_API_KEY",
+        "WHISPER_CPP_API_KEY",
         "TELEGRAM_BOT_TOKEN",
         "DIAGNOSTICS_INGEST_TOKEN",
         "KOSYNC_MIRRORED_LOGIN",

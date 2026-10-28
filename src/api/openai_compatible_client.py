@@ -9,6 +9,7 @@ import logging
 import os
 import time
 from typing import List, Optional
+from urllib.parse import urlsplit
 
 import requests
 
@@ -17,6 +18,22 @@ from src.api.llm_settings import llm_setting_truthy
 logger = logging.getLogger(__name__)
 
 _JUDGE_MAX_TOKENS = 200
+
+
+def model_catalog_url(base_url: str) -> str:
+    url = f"{base_url.rstrip('/')}/models"
+    if urlsplit(base_url).hostname == "openrouter.ai":
+        url += "?output_modalities=all"
+    return url
+
+
+def parse_model_catalog(payload) -> List[str]:
+    if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+        raise ValueError("Malformed model catalog")
+    rows = payload["data"]
+    if any(not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"] for row in rows):
+        raise ValueError("Malformed model catalog")
+    return [row["id"] for row in rows]
 
 
 def _env_first(*keys: str, default: str = "") -> str:
@@ -92,14 +109,10 @@ class OpenAICompatibleClient:
         if not self.base_url:
             return []
         try:
-            r = self._request("GET", f"{self.base_url}/models", headers=self._headers(), timeout=10)
+            r = self._request("GET", model_catalog_url(self.base_url), headers=self._headers(), timeout=10)
             if r.status_code != 200:
                 return []
-            data = r.json() or {}
-            models = data.get("data")
-            if not isinstance(models, list):
-                return []
-            return [m.get("id", "") for m in models if isinstance(m, dict) and m.get("id")]
+            return parse_model_catalog(r.json())
         except Exception as e:
             logger.warning(f"OpenAI-compatible list_models failed: {e}", exc_info=True)
             return []

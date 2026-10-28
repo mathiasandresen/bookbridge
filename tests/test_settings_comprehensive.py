@@ -136,6 +136,24 @@ class TestSettingsComprehensive(unittest.TestCase):
             src.web_server.render_template = original_render
 
     @patch('src.web_server.restart_server')
+    def test_transcription_key_save_reload_replace_and_clear(self, _restart):
+        from src.utils.config_loader import ConfigLoader
+        from src.utils.secret_store import is_secret_key
+
+        key = 'WHISPER_CPP_API_KEY'
+        self.assertTrue(is_secret_key(key))
+        for value in ('first-key', 'replacement-key', ''):
+            response = self.client.post('/settings', data={key: value})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(self.settings_store[key], value)
+            os.environ[key] = 'environment-loses-to-database'
+            ConfigLoader.load_settings(self.mock_container.mock_database_service)
+            self.assertEqual(os.environ[key], value)
+        self.client.post('/settings', data={key: 'retained-key'})
+        self.client.post('/settings', data={'SYNC_PERIOD_MINS': '5'})
+        self.assertEqual(self.settings_store[key], 'retained-key')
+
+    @patch('src.web_server.restart_server')
     def test_all_bool_toggles(self, mock_restart):
         """Verify EVERY boolean setting can be toggled ON and OFF."""
         

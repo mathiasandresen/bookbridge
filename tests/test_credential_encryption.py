@@ -221,6 +221,20 @@ class TestGlobalSettingsAtRest(SecretStoreTestCase):
         self.assertEqual(svc.get_setting("ABS_KEY"), "")
 
 
+    def test_transcription_key_environment_bootstrap_and_encrypted_reload(self):
+        from src.utils.config_loader import ConfigLoader
+
+        key = "WHISPER_CPP_API_KEY"
+        with unittest.mock.patch.dict(os.environ, {key: "transcription-key"}):
+            service = self._service()
+            ConfigLoader.bootstrap_config(service)
+            self.assertEqual(service.get_setting(key), "transcription-key")
+            self.assertTrue(secret_store.is_encrypted(self._raw_rows("settings", key)[0]))
+            os.environ[key] = "environment-key"
+            ConfigLoader.load_settings(service)
+            self.assertEqual(os.environ[key], "transcription-key")
+
+
 class TestPlaintextMigration(SecretStoreTestCase):
     def _write_legacy_plaintext(self, svc: DatabaseService, user_id: int) -> None:
         """Simulate an install that predates encryption by writing raw rows."""
