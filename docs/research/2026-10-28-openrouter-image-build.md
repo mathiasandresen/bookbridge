@@ -1,5 +1,7 @@
 # OpenRouter image build
 
+This initial image is superseded by the provider-selection fix documented in [provider-selection verification](2026-10-28-provider-selection-verification.md). Its runtime factory still selects Ollama for the canonical UI value. Use the corrected image recorded there.
+
 Published image:
 
 ```text
